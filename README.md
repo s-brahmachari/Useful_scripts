@@ -1,1 +1,1 @@
-# Useful_scripts
+Collection of useful scripts
