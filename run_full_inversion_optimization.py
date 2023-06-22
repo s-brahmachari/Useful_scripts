@@ -89,6 +89,22 @@ def temper_polymer(sim, T_high=300, blocksize=10000, dT=30):
     sim.runSimBlock(blocksize, increment=False)
     print("Final temperature:", sim.integrator.getTemperature())
 
+def update_new_params(sim, opt, iter_step):
+    #compute new lambdas and store into csv
+    lamb_new = opt.getLamb(Lambdas=f"input/lambda_{iter_step-1}")
+    lamb_new.to_csv(f"input/lambda_{iter_step}", index=False)
+
+    sim.removeForce("CustomTypes")
+    sim.addAdditionalForce(sim.addCustomTypes, TypesTable=f"input/lambda_{iter_step}")
+
+def save_data(sim, opt, iter_step):
+    error = opt.error
+    with open('output/error.txt','a+') as ferr: ferr.write(f"{iter_step} {error}\n")
+    print("ERROR: ", error)
+    
+    with h5py.File(os.path.join(sim.folder,f"Pi_{iter_step}.h5"), 'w') as hf:
+         hf.create_dataset("Pi", data=opt.Pi/opt.NFrames)
+
 def train(sim, opt, n_steps, n_replicas=10, n_blocks=5000, blocksize=1000, temper_between_replicas=True):
     sim.initStorage(filename=sim.name)
 
@@ -106,24 +122,14 @@ def train(sim, opt, n_steps, n_replicas=10, n_blocks=5000, blocksize=1000, tempe
                     sim.saveStructure(mode = 'pdb')
                     sim.saveStructure()
         
-        #compute new lambdas and store into csv
-        lamb_new = opt.getLamb(Lambdas=f"input/lambda_{iter_step-1}")
-        lamb_new.to_csv(f"input/lambda_{iter_step}", index=False)
-        error = opt.error
-        with open('output/error.txt','a+') as ferr: ferr.write(f"{iter_step} {error}\n")
-        print("ERROR: ", error)
-
-        with h5py.File(os.path.join(sim.folder,f"Pi_{iter_step}.h5"), 'w') as hf:
-            hf.create_dataset("Pi", data=opt.Pi/opt.NFrames)
-
-        sim.removeForce("CustomTypes")
-        sim.addAdditionalForce(sim.addCustomTypes, TypesTable=f"input/lambda_{iter_step}")
+        update_new_params(sim, opt, iter_step)
+        save_data(sim, opt, iter_step)
     
     sim.storage[0].close()
 
 def main():
     hic_file = sys.argv[1]
-    opt = initialize_optimization(hic_file, eta=0.02, cutoff=2e-3)
+    opt = initialize_optimization(hic_file, eta=0.01, cutoff=1e-3)
     sim = initialize_simulation(name='Wang2015_delSMC', platform='CUDA',)
     train(sim, opt, n_steps=20, n_replicas=10, n_blocks=5000, blocksize=1000, temper_between_replicas=True)
 
